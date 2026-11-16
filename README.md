@@ -1,73 +1,43 @@
-# SmartPLAY 網球排場助手 / SmartPLAY Tennis Assistant
+# SmartPLAY 网球排场助手 / SmartPLAY Tennis Assistant
 
-香港康文署網球場排場與空位提醒。使用公開 SmartPLAY 數據，在本機排列候選場次、追蹤新增空位和匯出放位提醒。
+基于香港康文署公开 SmartPLAY 数据，筛选网球场空位、排列候选场次，并在关注场地出现新空位时发出本机提醒。适合关注宝云道网球场、香港网球中心及附近球场的球友。
 
 A local planner and availability monitor for Hong Kong LCSD tennis courts. Rank possible sessions, get alerts for newly open slots, and export release reminders using public SmartPLAY data.
 
-[繁體中文](#繁體中文) · [English](#english) · [下載 / Download ZIP](https://github.com/tommyshyr/smartplay-tennis-assistant/archive/refs/heads/main.zip)
+[简体中文](#简体中文) · [English](#english) · [图文使用指南 / Illustrated guide](docs/guide.md) · [下载 / Download ZIP](https://github.com/tommyshyr/smartplay-tennis-assistant/archive/refs/heads/main.zip)
 
-## 繁體中文
+## 简体中文
 
-這是獨立開源工具。你在官方 My SmartPLAY App 或網站登入、選場及付款。助手可在付款後記錄你的預訂，並在排場時避開重疊時段。[官方 SmartPLAY](https://www.smartplay.lcsd.gov.hk/website/tc/)
+### 能做什么
 
-### 功能與場地
-
-| 功能 | 說明 |
+| 功能 | 说明 |
 | --- | --- |
-| 排場 | 按場地優先次序、星期、時段、單打／雙打及每小時預算篩選。預設優先連續兩小時，可保留一小時備選。 |
-| 空位監測 | 預設關注**寶雲道網球場**和**香港網球中心**。程式運行時約每五分鐘查詢康文署公開數據，發現新增的一小時空位時發送本機提醒。 |
-| 放位提醒 | 顯示香港時間倒數，可匯出未來 30 天的放位日曆。 |
-| 行程管理 | 手動登記已付款的官方預訂、檢查時段重疊，並匯出行程日曆。 |
+| 筛选场次 | 按场地优先级、星期、时段、单打或双打、每小时预算筛选。默认优先连续两小时，并可保留一小时备选。 |
+| 监测空位 | 默认关注**宝云道网球场**和**香港网球中心**。助手运行时约每五分钟查询公开数据，发现新增的一小时空位时发出本机提醒。 |
+| 提醒放位 | 显示香港时间倒计时，并可将未来 30 天的放位提醒导入日历。 |
+| 管理行程 | 手动登记已付款场次，排场时避开时间冲突，并将已登记行程导出到日历。 |
 
-排場及監測支援寶雲道網球場、香港網球中心、銅鑼灣運動場及維多利亞公園普通網球場。四處均位於灣仔區。[康文署場地名單](https://www.lcsd.gov.hk/tc/programmes/programmeslist/districtsports/crsprog/listbookoffice.html)
+排场和监测另支持铜锣湾运动场及维多利亚公园普通网球场。以上四处均位于湾仔区。[康文署场地名单](https://www.lcsd.gov.hk/tc/programmes/programmeslist/districtsports/crsprog/listbookoffice.html)
 
-### 安裝與啟動
+在 [My SmartPLAY App 或官方网页](https://www.smartplay.lcsd.gov.hk/website/tc/)登录、选场和付款。连续两小时有公开空位时，仍需在官方页面核对是否为同一个球场编号。
 
-需要 [Python 3.11 或更新版本](https://www.python.org/downloads/)，只使用 Python 標準函式庫。下載上方的 ZIP 並解壓，或執行以下指令。
+### 快速开始
 
-```sh
-git clone https://github.com/tommyshyr/smartplay-tennis-assistant.git
-cd smartplay-tennis-assistant
-```
+1. 安装 [Python 3.11 或更新版本](https://www.python.org/downloads/)。下载上方 ZIP 并解压，或运行 `git clone https://github.com/tommyshyr/smartplay-tennis-assistant.git`。
+2. **Windows** 双击 `Start-Windows.cmd`，也可在项目目录运行 `python launch.py`。**macOS / Linux** 在项目目录运行 `python3 launch.py`。
+3. 打开 [本机助手](http://127.0.0.1:8787/)。首次使用可点「进入演示」熟悉界面。
+4. 在「排场偏好」设置筛选条件，再在「空位监测」勾选关注场地、保存设置并测试浏览器提醒。
+5. 点击候选场次的「去官方选场」，付款成功后回到助手登记。
 
-| 系統 | 從專案目錄啟動 |
-| --- | --- |
-| Windows | 雙擊 `Start-Windows.cmd` 或執行 `python launch.py`。如找不到 `python`，請確認安裝時已加到 PATH。 |
-| macOS、Linux | 在終端機執行 `python3 launch.py`。macOS 也可用 `sh Start-Mac.command`。 |
+监测期间保持助手运行、电脑唤醒。浏览器提醒还需要页面保持打开。助手仅监听 `127.0.0.1`，偏好、数据快照与预订记录保存在本机的 `data/assistant.sqlite3`。
 
-啟動後打開 [http://127.0.0.1:8787/](http://127.0.0.1:8787/)。保持終端機開啟，按 `Ctrl+C` 停止。操作介面以中文顯示。
+**[查看完整图文使用指南](docs/guide.md)**，包括 Windows 和 macOS 启动步骤、空位通知设置、放位时间、手动导入 JSON 和常见问题。
 
-### 使用方法
+[![SmartPLAY 空位监测面板截图](docs/images/monitor.png)](docs/guide.md#3-设置空位监测与通知)
 
-1. **設定排場。** 在「排场偏好」選場地、星期、時段、單打／雙打、時長和預算，按「保存偏好」。預算填 `0` 表示不限。在「推荐场次」可按日期篩選和複製候選場次。
-2. **設定空位監測。** 在「空位监测」選關注場地，勾選「每五分钟查询官方空位」，按「保存监测设置」。監測沿用單打／雙打設定，並獨立追蹤一小時空位。首次成功讀取時可提醒當時已有的空位。同一時段持續有空時，只提醒一次。
-3. **測試通知。** 按「启用浏览器提醒」並授權，再按「测试浏览器提醒」。瀏覽器通知需要保留頁面。Windows 本機通知可在瀏覽器關閉時送出，前提是助手持續運行、電腦未睡眠且系統允許顯示通知。近期提醒也會顯示在「空位监测」。
-4. **到官方渠道訂場。** 按場地、日期及時段查找。公開數據提供場地及設施類別的空位數。預訂連續兩小時時，請在官方頁面核對兩節是否為同一個場號。空位、費用和付款結果以官方頁面為準。
-5. **付款後登記。** 在對應候選時段按「已付款后录入」，填寫官方預訂編號和實付金額。付款後的官方紀錄可在 My SmartPLAY 查閱。按「导出行程」可把本機已登記時段加到日曆。
+*截图使用测试样例。*
 
-### 放位時間（香港時間）
-
-| 時間 | 提醒 |
-| --- | --- |
-| 06:55 | 本機準備提醒。 |
-| 07:00 | My SmartPLAY App 透過「智方便」登入的優先入口。11 歲以下合資格用戶可透過 App 按官方安排預訂。 |
-| 07:15 | 官方網站、一般 App 登入、自助服務站及櫃檯。 |
-
-七天預訂期包括預訂當天。按「添加放位日历提醒」下載 `.ics`，匯入手機或電腦日曆並開啟通知。[康文署放位公告](https://www.info.gov.hk/gia/general/202607/03/P2026070300278.htm) · [SmartPLAY 使用條件](https://www.smartplay.lcsd.gov.hk/website/tc/about/conditions-of-use-of-smartplay.html)
-
-### 數據與故障排查
-
-康文署約每五分鐘更新公開數據。自動查詢失敗後，程式會延後重試並標示舊數據。成功讀取的即時公開數據才會觸發空位通知。請到官方 App 核對當前空位及公開數據未涵蓋的時段。[康文署開放數據](https://data.gov.hk/tc-data/dataset/hk-lcsd-facility-facility-tcvenue)
-
-- **網絡受限。** 展開「网络受限？手动导入官方 JSON」，貼上完整 JSON 或選擇下載的檔案，按「导入并校验」。匯入後可用該快照排場。查看更新須重新匯入或等待自動連線恢復。[官方 JSON](https://data.smartplay.lcsd.gov.hk/rest/cms/api/v1/publ/contents/open-data/tennis/file)
-- **先試用介面。** 按「进入演示」查看合成時段。按「切换官方数据」返回。
-- **未看到通知。** 確認程式仍在運行、電腦未睡眠、監測設定已儲存，並查看最近檢查時間。可用測試按鈕驗證瀏覽器通知權限。
-
-### 本機資料與授權
-
-程式只在 `127.0.0.1` 提供介面。偏好、快照、監測紀錄和手動登記的預訂儲存在 `data/assistant.sqlite3`。匯出的預訂日曆可包含你輸入的官方預訂編號。
-
-原始碼採用 [MIT 授權](LICENSE)。公開空位由香港特別行政區政府康樂及文化事務署經 DATA.GOV.HK 提供，資料須遵循開放數據平台條款。[DATA.GOV.HK 使用條款](https://data.gov.hk/tc/terms-and-conditions) · [康文署資料字典](https://www.lcsd.gov.hk/datagovhk/facility/facility-tcvenue_data_dictionary.pdf)
+原始代码采用 [MIT 许可证](LICENSE)。公开空位数据由香港特区政府康文署通过 DATA.GOV.HK 提供。[康文署开放数据](https://data.gov.hk/tc-data/dataset/hk-lcsd-facility-facility-tcvenue) · [DATA.GOV.HK 使用条款](https://data.gov.hk/tc/terms-and-conditions)
 
 ---
 
@@ -104,6 +74,8 @@ Open [http://127.0.0.1:8787/](http://127.0.0.1:8787/) and keep the terminal open
 
 ### Use the assistant
 
+[Illustrated user guide](docs/guide.md#english-quick-guide) with screenshots and button labels.
+
 1. **Set planning preferences.** Open **排场偏好** (Planning preferences) to choose venues, days, time, singles or doubles, duration and hourly budget. Click **保存偏好** (Save preferences). Set the budget to `0` for no limit. In **推荐场次** (Recommended sessions), filter by date and copy a candidate.
 2. **Configure monitoring.** In **空位监测** (Availability monitor), select venues, leave **每五分钟查询官方空位** (Check official availability every five minutes) enabled, and click **保存监测设置** (Save monitor settings). The watch uses your singles or doubles preference and tracks individual one-hour slots independently of the other planning filters. The first successful check can alert for existing openings. A slot triggers one alert while it stays open.
 3. **Test notifications.** Click **启用浏览器提醒** (Enable browser notifications), grant permission, then click **测试浏览器提醒** (Test browser notifications). Browser alerts require the page to stay open. Windows can deliver native desktop alerts with the browser closed while the assistant is running, the computer is awake, and system settings allow notifications. Recent alerts also appear in the monitor.
@@ -134,9 +106,9 @@ The service listens on `127.0.0.1`. Preferences, saved snapshots, watch history,
 
 The source code is released under the [MIT License](LICENSE). The public availability data is provided by the Leisure and Cultural Services Department of the Hong Kong SAR Government via DATA.GOV.HK and is subject to the portal's terms. [DATA.GOV.HK terms](https://data.gov.hk/en/terms-and-conditions) · [LCSD data dictionary](https://www.lcsd.gov.hk/datagovhk/facility/facility-tcvenue_data_dictionary.pdf)
 
-## 測試 / Tests
+## 测试 / Tests
 
-在專案目錄執行。Run from the project folder.
+在项目目录运行。Run from the project folder.
 
 ```sh
 python -m unittest discover -s tests
