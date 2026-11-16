@@ -141,6 +141,29 @@ class ApplicationHTTPTests(unittest.TestCase):
         self.assertEqual(restored.config['venue_ids'], ['BRTC'])
         self.assertFalse(restored.config['monitor_enabled'])
 
+    def test_simplified_labels_for_legacy_records_and_official_feed(self):
+        state = self.imported_state()
+        self.assertEqual(state['candidates'][0]['venue_name'], '香港网球中心')
+        day = official_rows()[0]['Available_Date']
+        self.app.store.add_booking({
+            'id': 'legacy-booking', 'reference': 'TEST-LEGACY', 'venue_id': 'HKTC',
+            'venue_name': '香港網球中心', 'date': day, 'start': '13:00', 'end': '14:00',
+        })
+        self.app.store.set('availability_watch', {'events': [{
+            'id': 'legacy-alert', 'kind': 'availability', 'venue_id': 'BRTC',
+            'created_at': datetime.now(HKT).isoformat(),
+            'title': '寶雲道網球場 · 1 个时段有空位',
+            'slots': [{'venue_name': '寶雲道網球場'}],
+        }]})
+        restored = Application(self.temp.name, client=FeedClient())
+        result = restored.snapshot()
+        self.assertEqual(result['bookings'][0]['venue_name'], '香港网球中心')
+        self.assertEqual(result['alerts'][0]['title'], '宝云道网球场 · 1 个时段有空位')
+        self.assertEqual(result['alerts'][0]['slots'][0]['venue_name'], '宝云道网球场')
+        status, calendar, _ = self.request(path='/api/bookings.ics')
+        self.assertEqual(status, 200)
+        self.assertIn('SUMMARY:香港网球中心', calendar)
+
     def test_demo_cannot_create_real_booking_or_calendar_event(self):
         code, state, _ = self.request('POST', '/api/mode', {'mode': 'demo'})
         self.assertEqual(code, 200)

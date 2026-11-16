@@ -20,6 +20,8 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlsplit
 
+from smartplay.planner import VENUES, venue_label
+
 HKT = timezone(timedelta(hours=8))
 FEED_URL = "https://data.smartplay.lcsd.gov.hk/rest/cms/api/v1/publ/contents/open-data/tennis/file"
 MIN_REFRESH_SECONDS = 300
@@ -28,6 +30,7 @@ MAX_BYTES = 20 * 1024 * 1024
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
 _TIME = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d\Z")
 
+# Traditional Chinese strings here match the official Venue_Name_TC field.
 VENUE_NAMES = {
     "BRTC": ("寶雲道網球場", "Bowen Road Tennis Court", "Bowen Road Tennis Courts"),
     "HKTC": ("香港網球中心", "Hong Kong Tennis Centre"),
@@ -49,6 +52,7 @@ _NAME_TO_ID = {
     for venue_id, names in VENUE_NAMES.items()
     for name in names
 }
+_NAME_TO_ID.update({venue["name"]: venue["id"] for venue in VENUES})
 
 
 def _now(value: datetime | str | None = None) -> datetime:
@@ -147,7 +151,7 @@ def parse_feed(payload: Any, play_type: str = "singles") -> dict:
         slot = {
             "id": hashlib.sha256("|".join(key).encode()).hexdigest()[:20],
             "venue_id": venue_id,
-            "venue_name": VENUE_NAMES[venue_id][0],
+            "venue_name": venue_label(venue_id),
             "date": date_text,
             "start": start,
             "end": end,
@@ -166,9 +170,9 @@ def parse_feed(payload: Any, play_type: str = "singles") -> dict:
     if duplicate_conflicts:
         warnings.append(f"{duplicate_conflicts} 条重复时段数量不一致，已采用较低数量。")
     if skipped_types:
-        warnings.append("已排除未识别的设施分组：" + "、".join(sorted(skipped_types)))
+        warnings.append(f"已排除 {len(skipped_types)} 类无法识别的设施。")
     if not records:
-        warnings.append("公开数据未提供所选邻近场地的标准网球场记录；请以官方 App 为准。")
+        warnings.append("公开数据未提供所选邻近场地的标准网球场记录；请以官方应用为准。")
     return {
         "slots": sorted(records.values(), key=lambda s: (s["date"], s["venue_id"], s["facility_group"], s["start"])),
         "warnings": warnings,
@@ -315,7 +319,7 @@ class FeedClient:
                 error = f"官方公开数据接口返回 HTTP {exc.code}，已暂停请求 30 分钟；可在浏览器打开官方数据并手动导入。"
             elif exc.code == 429:
                 delay = _retry_after(exc.headers.get("Retry-After") if exc.headers else None, at)
-                error = "官方公开数据接口限流，已按 Retry-After 或至少五分钟退避。"
+                error = "官方公开数据接口限流，已根据接口指定的等待时间暂停重试，至少等待五分钟。"
             else:
                 error = f"官方公开数据接口返回 HTTP {exc.code}；保留上次成功快照。"
             exc.close()

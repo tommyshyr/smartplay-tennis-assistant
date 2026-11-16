@@ -3,7 +3,7 @@
 from datetime import datetime
 from hashlib import sha256
 
-from smartplay.planner import HKT, plan_slots
+from smartplay.planner import HKT, plan_slots, venue_label
 
 
 DEFAULT_WATCH_VENUES = ("BRTC", "HKTC")
@@ -16,6 +16,13 @@ class AvailabilityWatch:
         self.counts = saved.get("counts", {})
         self.checked_at = saved.get("checked_at")
         self.events = saved.get("events", [])
+        for event in self.events:
+            venue_id = event.get("venue_id")
+            if venue_id:
+                name, separator, detail = event["title"].partition(" · ")
+                event["title"] = f"{venue_label(venue_id, name)}{separator}{detail}"
+                for slot in event.get("slots", []):
+                    slot["venue_name"] = venue_label(venue_id, slot.get("venue_name"))
         self.available_slots = 0
         self.covered_venues = []
         self.selection = None

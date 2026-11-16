@@ -23,7 +23,7 @@ def available():
 
 
 if sys.version_info < (3, 11):
-    raise SystemExit('Please install Python 3.11 or newer.')
+    raise SystemExit('请安装 Python 3.11 或更新版本。')
 if available():
     webbrowser.open(URL)
     raise SystemExit(0)

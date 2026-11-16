@@ -3,57 +3,34 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>规则与数据来源 / Rules and data sources | SmartPLAY Tennis Assistant</title>
+  <title>规则与数据来源 | SmartPLAY Tennis Assistant</title>
   <link rel="stylesheet" href="/research.css">
 </head>
 <body>
   <header>
-    <a href="/">返回网球排场助手 / Back to planner</a>
+    <a href="/">返回网球排场助手</a>
   </header>
   <main>
-    <nav aria-label="语言 / Language"><a href="#zh-cn" lang="zh-CN">简体中文</a> · <a href="#en" lang="en">English</a></nav>
-    <h1 id="zh-cn">规则与数据来源</h1>
-    <p>助手使用康文署公开空位数据筛选场次，并发出本机提醒。请在官方 My SmartPLAY App 或网页登录、选场及付款。</p>
-    <p><a href="https://github.com/tommyshyr/smartplay-tennis-assistant/blob/main/docs/guide.md" rel="noopener">图文使用指南 / Illustrated user guide</a></p>
+    <h1>规则与数据来源</h1>
+    <p>助手使用康文署公开空位数据筛选场次，并发出本机提醒。请在官方 My SmartPLAY 应用 或网页登录、选场及付款。</p>
+    <p><a href="https://github.com/tommyshyr/smartplay-tennis-assistant/blob/main/docs/guide.md" rel="noopener">图文使用指南</a></p>
 
     <h2>香港放位时间</h2>
     <ul>
-      <li><strong>07:00</strong>　通过「智方便」登录 My SmartPLAY App，可优先预订。符合条件的未满 11 岁用户可按康文署公布的安排使用 App。</li>
-      <li><strong>07:15</strong>　可使用普通 App 登录、官方网页、自助服务站或服务柜台预订。</li>
+      <li><strong>07:00</strong>　通过「智方便」登录 My SmartPLAY 应用，可优先预订。符合条件的未满 11 岁用户可按康文署公布的安排使用该应用。</li>
+      <li><strong>07:15</strong>　可使用应用内普通登录、官方网页、自助服务站或服务柜台预订。</li>
     </ul>
     <p>七天预订期包括预订当天。康文署使用条款规定，使用程序或自动化工具进行预订、交易或干扰系统，违规账号可被暂停 360 天。</p>
     <p><a href="https://www.info.gov.hk/gia/general/202607/03/P2026070300278.htm">康文署放位安排公告</a> · <a href="https://www.smartplay.lcsd.gov.hk/website/tc/about/conditions-of-use-of-smartplay.html">SmartPLAY 使用条款</a></p>
 
     <h2>空位数据的范围</h2>
-    <p>公开 JSON 约每五分钟更新，包含场地、设施类型、日期、时段和空位数量。相邻时段各有空位时，请到官方 App 核对是否为同一球场。</p>
-    <p>助手成功读取官方数据后才会发送空位通知。手动导入的快照可用于排场。公开数据缺少某个场地或时段时，请到官方 App 核对。</p>
+    <p>公开 JSON 约每五分钟更新，包含场地、设施类型、日期、时段和空位数量。相邻时段各有空位时，请到官方应用 核对是否为同一球场。</p>
+    <p>助手成功读取官方数据后才会发送空位通知。手动导入的快照可用于排场。公开数据缺少某个场地或时段时，请到官方应用 核对。</p>
     <p><a href="https://data.gov.hk/tc-data/dataset/hk-lcsd-facility-facility-tcvenue/resource/761727b6-5b1d-4552-89f5-1fddcc2122a3">官方空位数据集</a> · <a href="https://www.lcsd.gov.hk/datagovhk/facility/facility-tcvenue_data_dictionary.pdf">康文署数据字典</a></p>
 
     <h2>数据来源及权利</h2>
     <p>公开空位数据由香港特别行政区政府康乐及文化事务署通过 DATA.GOV.HK 开放数据平台提供。数据知识产权属于香港特别行政区政府及康乐及文化事务署。本助手是独立开源项目。</p>
     <p><a href="https://data.gov.hk/tc/terms-and-conditions">DATA.GOV.HK 使用条款</a></p>
-
-    <section id="en" lang="en" aria-labelledby="rules-en">
-      <h1 id="rules-en">Rules and data sources</h1>
-      <p>SmartPLAY Tennis Assistant uses LCSD's public availability feed to rank possible sessions and send local alerts. Sign in, select a court, and pay in the official My SmartPLAY app or website.</p>
-
-      <h2>Daily release times in Hong Kong</h2>
-      <ul>
-        <li><strong>07:00</strong> Priority booking in My SmartPLAY using iAM Smart. Eligible users under 11 can book through the app under LCSD's separate arrangement.</li>
-        <li><strong>07:15</strong> Booking opens through regular app login, the official website, self-service stations, and service counters.</li>
-      </ul>
-      <p>The seven-day booking window includes the day you book. LCSD prohibits using software to automate bookings or interfere with SmartPLAY. An account that breaches these terms can be suspended for 360 days.</p>
-      <p><a href="https://www.info.gov.hk/gia/general/202607/03/P2026070300277.htm">LCSD release notice</a> · <a href="https://www.smartplay.lcsd.gov.hk/website/en/about/conditions-of-use-of-smartplay.html">SmartPLAY Conditions of Use</a></p>
-
-      <h2>Availability data</h2>
-      <p>LCSD refreshes the public feed about every five minutes. It lists the venue, facility type, date, time slot, and available court count. For two consecutive hours, verify the same court number in both slots. The official app has the current availability and fees.</p>
-      <p>Alerts use successful live reads of the public feed. The planner can also use a manually imported snapshot. Check the official app if the feed omits a venue or time.</p>
-      <p><a href="https://data.gov.hk/en-data/dataset/hk-lcsd-facility-facility-tcvenue">LCSD open dataset</a> · <a href="https://www.lcsd.gov.hk/datagovhk/facility/facility-tcvenue_data_dictionary.pdf">LCSD data dictionary</a></p>
-
-      <h2>Data attribution</h2>
-      <p>This is an independent open-source project. The public data is provided by the Leisure and Cultural Services Department of the Hong Kong SAR Government via DATA.GOV.HK and is subject to the portal's terms.</p>
-      <p><a href="https://data.gov.hk/en/terms-and-conditions">DATA.GOV.HK terms</a></p>
-    </section>
   </main>
 </body>
 </html>

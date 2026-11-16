@@ -4,6 +4,8 @@ import sqlite3
 from pathlib import Path
 from contextlib import contextmanager
 
+from smartplay.planner import venue_label
+
 
 class Store:
     def __init__(self, path):
@@ -34,7 +36,10 @@ class Store:
     def bookings(self):
         with self.connect() as con:
             rows = con.execute('SELECT payload FROM bookings ORDER BY id').fetchall()
-        return [json.loads(r[0]) for r in rows]
+        bookings = [json.loads(row[0]) for row in rows]
+        for booking in bookings:
+            booking['venue_name'] = venue_label(booking.get('venue_id'), booking.get('venue_name'))
+        return bookings
 
     def add_booking(self, booking):
         try:

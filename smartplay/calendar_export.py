@@ -41,7 +41,7 @@ def release_calendar(now=None, days=30):
     events = []
     for offset in range(days):
         day = now.date() + timedelta(days=offset)
-        for hour, minute, channel in [(7, 0, 'App + 智方便'), (7, 15, '网页／普通登录')]:
+        for hour, minute, channel in [(7, 0, '官方应用与智方便'), (7, 15, '网页／普通登录')]:
             start = datetime.combine(day, datetime.min.time(), HKT).replace(hour=hour, minute=minute)
             if start <= now:
                 continue

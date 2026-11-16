@@ -44,8 +44,13 @@
     const headers = { Accept: 'application/json', ...options.headers };
     if (options.body !== undefined) headers['Content-Type'] = 'application/json';
     if (options.method && options.method !== 'GET') headers['X-CSRF-Token'] = state?.csrf_token || '';
-    const response = await fetch(path, { ...options, headers, credentials: 'same-origin', cache: 'no-store' });
-    const text = await response.text();
+    let response, text;
+    try {
+      response = await fetch(path, { ...options, headers, credentials: 'same-origin', cache: 'no-store' });
+      text = await response.text();
+    } catch {
+      throw new Error('读取本地助手服务失败，请稍后重试。');
+    }
     let data;
     try { data = text ? JSON.parse(text) : {}; } catch { throw new Error('本地服务返回了无法识别的内容。'); }
     if (!response.ok) throw new Error(asMessage(data.error || data.message || `请求失败 (${response.status})`));
@@ -69,7 +74,7 @@
     $('source-label').textContent = demo ? labels.demo : (labels[feed.status] || '等待获取官方数据');
     $('source-dot').className = `status-dot ${demo || feed.status === 'imported' ? 'demo' : feed.status === 'live' ? 'live' : 'error'}`;
     const parts = [];
-    if (!demo && feed.fetched_at) parts.push(`${sourceAge(feed.fetched_at)} (${fullTimestamp.format(validDate(feed.fetched_at))} HKT)`);
+    if (!demo && feed.fetched_at) parts.push(`${sourceAge(feed.fetched_at)} （${fullTimestamp.format(validDate(feed.fetched_at))}，香港时间）`);
     if (!demo && feed.source_updated_at && validDate(feed.source_updated_at)) parts.push(`来源更新时间 ${fullTimestamp.format(validDate(feed.source_updated_at))}`);
     if (demo) parts.push('下方场次为合成示例。空位监测的开关独立设置。');
     else if (feed.status === 'imported') parts.push('手动快照不会自行更新；请重新下载导入以获取新空位。');
@@ -107,7 +112,7 @@
     const release = state.release || {};
     const appAt = validDate(release.app_at);
     const webAt = validDate(release.web_at);
-    $('app-release-date').textContent = appAt ? `${shortDate.format(appAt)} · 请在官方 App 操作` : '等待本地时间表';
+    $('app-release-date').textContent = appAt ? `${shortDate.format(appAt)} · 请在官方应用操作` : '等待本地时间表';
     $('web-release-date').textContent = webAt ? `${shortDate.format(webAt)} · 官方网页可开始预订` : '等待本地时间表';
     const newPlay = dateOnly(release.new_play_date);
     $('new-play-date').textContent = newPlay ? shortDate.format(newPlay) : '—';
@@ -195,8 +200,8 @@
     status.classList.toggle('active', active);
     const checkedAt = validDate(monitor.last_checked_at);
     const dataAt = validDate(feed.source_updated_at);
-    $('watch-checked-at').textContent = checkedAt ? `${fullTimestamp.format(checkedAt)} HKT` : '尚未成功检查';
-    $('watch-data-at').textContent = dataAt ? `${fullTimestamp.format(dataAt)} HKT` : '未提供';
+    $('watch-checked-at').textContent = checkedAt ? `${fullTimestamp.format(checkedAt)}（香港时间）` : '尚未成功检查';
+    $('watch-data-at').textContent = dataAt ? `${fullTimestamp.format(dataAt)}（香港时间）` : '未提供';
     $('watch-slot-count').textContent = active && Number.isInteger(monitor.available_slots) ? `${monitor.available_slots} 个一小时时段` : '—';
     const coverage = $('watch-coverage');
     const partial = active && Array.isArray(covered) && covered.length < selected.length;
@@ -221,7 +226,7 @@
   function candidateText(candidate) { return `${candidate.venue_name} · ${candidate.date} ${candidate.start}–${candidate.end} · ${candidate.duration_hours} 小时`; }
   async function copyPlan(candidate) {
     const text = `${candidateText(candidate)}\n数据只供参考；${candidate.continuity === 'verified' ? '同场连续性来自数据，仍请在官方复核' : '同一片场地的连续性须在官方复核'}。\n${officialUrl}`;
-    try { await navigator.clipboard.writeText(text); toast('场次资料已复制。'); } catch { toast('无法访问剪贴板，请手动复制场次资料。', true); }
+    try { await navigator.clipboard.writeText(text); toast('场次信息已复制。'); } catch { toast('无法访问剪贴板，请手动复制场次信息。', true); }
   }
   function openRecord(candidate) {
     if (!canRecord()) { toast('请切换至可用的官方数据，并先在官方完成付款。', true); return; }
@@ -294,7 +299,7 @@
       const occurred = validDate(alert.created_at ?? alert.time);
       item.append(el('strong', '', alert.title));
       if (occurred) {
-        const time = el('time', 'alert-time', `${fullTimestamp.format(occurred)} HKT`);
+        const time = el('time', 'alert-time', `${fullTimestamp.format(occurred)}（香港时间）`);
         time.dateTime = occurred.toISOString();
         item.append(time);
       }

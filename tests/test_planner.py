@@ -100,7 +100,7 @@ class PlannerTests(unittest.TestCase):
     def test_invalid_slot_is_not_available(self):
         result = self.plan([slot(start="99:00"), slot(n="bad")])
         self.assertEqual(result["candidates"], [])
-        self.assertTrue(any("2筆" in w for w in result["warnings"]))
+        self.assertTrue(any("2 条" in w for w in result["warnings"]))
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local-only SmartPLAY assisted planner. Python 3.11+, no third-party packages."""
+"""SmartPLAY 网球排场助手，仅在本机运行。需要 Python 3.11 或更新版本。"""
 from __future__ import annotations
 
 import argparse
@@ -46,7 +46,7 @@ def validate_config(payload):
             date.fromisoformat(d)
     for key in ('monitor_enabled', 'allow_one_hour_fallback'):
         if type(cfg[key]) is not bool:
-            raise ValueError('开关值必须为 true 或 false。')
+            raise ValueError('开关只接受开启或关闭两种状态。')
     if cfg['play_type'] not in ('singles', 'doubles'):
         raise ValueError('请选择单打或双打。')
     if isinstance(cfg['duration_hours'], bool) or cfg['duration_hours'] not in (1, 2):
@@ -144,7 +144,7 @@ class Application:
             if mode == 'demo':
                 warnings.insert(0, '正在显示人工生成的演示数据，不能据此订场或登记真实预订。')
             if feed['status'] in ('unavailable', 'stale', 'imported') and mode != 'demo':
-                warnings.insert(0, '当前为空场快照或数据连接待恢复；不是实时锁场，请到官方 App 核对。')
+                warnings.insert(0, '当前为空场快照或数据连接待恢复；不是实时锁场，请到官方应用核对。')
             return {'now': now.isoformat(), 'mode': mode, 'config': config, 'venues': VENUES, 'feed': {k: v for k, v in feed.items() if k != 'slots'}, 'candidates': candidates, 'warnings': warnings, 'bookings': bookings, 'release': release, 'alerts': alerts, 'monitor': monitor, 'csrf_token': self.csrf_token}
 
     def refresh(self):
@@ -203,7 +203,7 @@ class Application:
         previous = self.last_tick
         self.last_tick = now
         # Sleep recovery emits one catch-up notice; never replays missed transactions.
-        for h, m, label in [(6, 55, '五分钟后 App 放位'), (7, 0, 'App + 智方便可以订场'), (7, 15, '网页／普通登录开放')]:
+        for h, m, label in [(6, 55, '官方应用将在五分钟后放位'), (7, 0, '可通过智方便在官方应用订场'), (7, 15, '网页／普通登录开放')]:
             at = now.replace(hour=h, minute=m, second=0, microsecond=0)
             if previous < at <= now:
                 late = (now - at).total_seconds() > 120
@@ -259,7 +259,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if not self.valid_host():
-            return self.send(403, {'error': 'Invalid host'})
+            return self.send(403, {'error': '无效的本机服务地址。'})
         path = urlsplit(self.path).path
         if path == '/api/state':
             return self.send(200, self.server.app.snapshot())
@@ -269,11 +269,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.send(200, booking_calendar(self.server.app.store.bookings()), 'text/calendar; charset=utf-8', 'smartplay-bookings.ics')
         files = {'/': ('web/index.html', 'text/html; charset=utf-8'), '/app.js': ('web/app.js', 'application/javascript; charset=utf-8'), '/style.css': ('web/style.css', 'text/css; charset=utf-8'), '/research.css': ('web/research.css', 'text/css; charset=utf-8'), '/research.html': ('docs/research.html', 'text/html; charset=utf-8')}
         if path not in files:
-            return self.send(404, {'error': 'Not found'})
+            return self.send(404, {'error': '未找到对应页面。'})
         name, mime = files[path]
         target = ROOT / name
         if not target.is_file():
-            return self.send(404, {'error': 'File unavailable'})
+            return self.send(404, {'error': '文件暂不可用。'})
         return self.send(200, target.read_bytes(), mime)
 
     def do_POST(self):
@@ -290,14 +290,14 @@ class Handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get('Content-Length', '0'))
         except ValueError:
-            return self.send(400, {'error': 'Invalid content length'})
+            return self.send(400, {'error': '请求内容长度无效。'})
         if length < 0 or length > 8 * 1024 * 1024:
             return self.send(413, {'error': '文件过大。最多 8 MB。'})
         self.connection.settimeout(5)
         try:
             raw_body = self.rfile.read(length)
         except TimeoutError:
-            return self.send(408, {'error': 'Request body timed out'})
+            return self.send(408, {'error': '读取请求内容超时。'})
         origin = self.headers.get('Origin')
         allowed = {f'http://127.0.0.1:{self.server.server_port}', f'http://localhost:{self.server.server_port}'}
         if not self.valid_host() or (origin and origin not in allowed) or not secrets.compare_digest(self.headers.get('X-CSRF-Token', ''), app.csrf_token):
@@ -337,7 +337,7 @@ class Handler(BaseHTTPRequestHandler):
                 app.store.remove_booking(booking_id)
                 result = app.snapshot()
             else:
-                return self.send(404, {'error': 'Not found'})
+                return self.send(404, {'error': '未找到对应页面。'})
             self.send(200, result)
         except (ValueError, TypeError, KeyError, OverflowError) as exc:
             self.send(400, {'error': str(exc)[:220]})
@@ -347,19 +347,19 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--port', type=int, default=8787)
-    parser.add_argument('--data-dir', default=str(ROOT / 'data'))
+    parser.add_argument('--port', type=int, default=8787, help='本机服务端口，默认 8787。')
+    parser.add_argument('--data-dir', default=str(ROOT / 'data'), help='用于保存设置和行程的文件夹。')
     args = parser.parse_args()
     application = Application(args.data_dir)
     try:
         server = Server(args.port, application)
     except OSError:
-        print('Port unavailable. Is another assistant already running? http://127.0.0.1:' + str(args.port))
+        print('端口不可用，请检查是否已启动另一个助手。http://127.0.0.1:' + str(args.port))
         return 1
     monitor = threading.Thread(target=application.run_monitor, name='public-data-monitor', daemon=True)
     monitor.start()
-    print('SmartPLAY Assistant: http://127.0.0.1:' + str(args.port), flush=True)
-    print('Keep this program running and your computer awake for monitoring. Ctrl+C to stop.', flush=True)
+    print('SmartPLAY 网球排场助手  http://127.0.0.1:' + str(args.port), flush=True)
+    print('监测空位时请保持程序运行、电脑唤醒。按 Ctrl+C 停止。', flush=True)
     try:
         server.serve_forever(poll_interval=0.5)
     except KeyboardInterrupt:

@@ -8,10 +8,10 @@ import math
 
 HKT = timezone(timedelta(hours=8), "HKT")
 VENUES = [
-    {"id": "BRTC", "venue_id": "BRTC", "name": "寶雲道網球場", "name_en": "Bowen Road Tennis Courts", "district": "灣仔", "courts": 4, "notes": "無泛光燈；4–9月06:00–19:00，10–3月07:00–18:00", "default": True},
-    {"id": "HKTC", "venue_id": "HKTC", "name": "香港網球中心", "name_en": "Hong Kong Tennis Centre", "district": "灣仔", "courts": 17, "notes": "07:00–23:00；8、10、11號場僅供單打", "default": True},
-    {"id": "CBSPG", "venue_id": "CBSPG", "name": "銅鑼灣運動場", "name_en": "Causeway Bay Sports Ground", "district": "灣仔", "courts": 6, "notes": "07:00–23:00；維修及封場以官方為準", "default": True},
-    {"id": "VPTC", "venue_id": "VPTC", "name": "維多利亞公園網球場", "name_en": "Victoria Park Tennis Courts", "district": "灣仔", "courts": 13, "notes": "普通網球場；不含另列的網球主場", "default": True},
+    {"id": "BRTC", "venue_id": "BRTC", "name": "宝云道网球场", "name_en": "Bowen Road Tennis Courts", "district": "湾仔", "courts": 4, "notes": "无泛光灯。4–9 月 06:00–19:00，10–3 月 07:00–18:00", "default": True},
+    {"id": "HKTC", "venue_id": "HKTC", "name": "香港网球中心", "name_en": "Hong Kong Tennis Centre", "district": "湾仔", "courts": 17, "notes": "07:00–23:00，8、10、11 号场仅供单打", "default": True},
+    {"id": "CBSPG", "venue_id": "CBSPG", "name": "铜锣湾运动场", "name_en": "Causeway Bay Sports Ground", "district": "湾仔", "courts": 6, "notes": "07:00–23:00，维修和封场安排以官方为准", "default": True},
+    {"id": "VPTC", "venue_id": "VPTC", "name": "维多利亚公园网球场", "name_en": "Victoria Park Tennis Courts", "district": "湾仔", "courts": 13, "notes": "普通网球场，不含另列的网球主场", "default": True},
 ]
 _VENUE_MAP = {v["id"]: v for v in VENUES}
 DEFAULT_CONFIG = {
@@ -22,6 +22,10 @@ DEFAULT_CONFIG = {
     "play_type": "singles", "max_hourly_hkd": 0,
     "holiday_dates": [], "excluded_dates": [],
 }
+
+
+def venue_label(venue_id, fallback=None):
+    return _VENUE_MAP.get(venue_id, {}).get("name", fallback or venue_id)
 
 
 def _now(value=None):
@@ -41,10 +45,10 @@ def _date(value):
 def _minutes(value):
     parts = str(value).split(":")
     if len(parts) != 2:
-        raise ValueError("time must be HH:MM")
+        raise ValueError("时间格式应为 HH:MM。")
     h, m = map(int, parts)
     if not (0 <= h <= 23 and 0 <= m <= 59):
-        raise ValueError("time out of range")
+        raise ValueError("时间超出有效范围。")
     return h * 60 + m
 
 
@@ -74,7 +78,7 @@ def release_schedule(now=None, play_date=None):
         "app_time": app.isoformat(), "web_time": web.isoformat(),
         "app_seconds": max(0, int((app - current).total_seconds())),
         "web_seconds": max(0, int((web - current).total_seconds())),
-        "note": "07:00僅官方App經智方便；網頁07:15起。七天含預訂當日。",
+        "note": "07:00 可通过智方便使用官方应用的优先入口，网页 07:15 开放。七天包含预订当天。",
     }
 
 
@@ -98,19 +102,19 @@ def plan_slots(slots, config=None, confirmed_bookings=None, now=None):
     released_offset = 6 if current.time() >= time(7) else 5
     latest = today + timedelta(days=released_offset)
     warnings = [
-        "中西區官方目錄未列網球場；本方案涵蓋已選灣仔鄰近場地。",
-        "空位資料不代表鎖場；須在官方App或網頁核對並付款，付款後才完成預訂。",
-        "繁忙時段同類設施每日合計最多兩小時；非繁忙時段每場地最多兩小時。仍須核對本工具以外的預訂。",
+        "官方目录未列出中西区网球场，候选场次来自你选中的湾仔区场地。",
+        "请在官方应用或网页核对空位并付款。付款成功后，预订才算完成。",
+        "繁忙时段同类设施每日合计最多两小时，非繁忙时段每个场地最多两小时。请同时核对助手以外的预订。",
     ]
     duration = float(cfg.get("duration_hours", 2))
     if duration not in (1, 2):
-        raise ValueError("duration_hours must be 1 or 2")
+        raise ValueError("时长只支持一或两小时。")
     start_limit, end_limit = _minutes(cfg["start_time"]), _minutes(cfg["end_time"])
     if start_limit >= end_limit:
-        raise ValueError("start_time must be before end_time")
+        raise ValueError("最早开始时间必须早于最晚结束时间。")
     budget = float(cfg.get("max_hourly_hkd", 0))
     if not math.isfinite(budget) or budget < 0:
-        raise ValueError("max_hourly_hkd must be a nonnegative finite number")
+        raise ValueError("每小时预算须为有效的非负数。")
     venue_ids = set(cfg["venue_ids"])
     weekdays, exclusions = set(cfg["weekdays"]), set(cfg["excluded_dates"])
     holidays = set(cfg["holiday_dates"])
@@ -125,7 +129,7 @@ def plan_slots(slots, config=None, confirmed_bookings=None, now=None):
             if begin < end:
                 booked[day.isoformat()].append((begin, end))
         except (ValueError, TypeError, KeyError):
-            warnings.append("有一筆已訂記錄格式無效，請檢查以確保防重疊有效。")
+            warnings.append("有一条已订记录格式无效，请核对该记录的时间。")
     groups = defaultdict(dict)
     invalid, unknown_price = 0, False
     for raw in slots:
@@ -209,14 +213,14 @@ def plan_slots(slots, config=None, confirmed_bookings=None, now=None):
                         if common is not None:
                             n = min(n, len(common))
                         price = sum(r["_rate"] * (r["_end"] - r["_begin"]) / 60 for r in chain) if all(r["_rate"] is not None for r in chain) else None
-                        warning = "同一球場連續時段仍須於官方頁面核對" if not known and minutes > 60 else "請於官方頁面核對空位及費用"
+                        warning = "请在官方页面核对连续时段是否为同一个球场" if not known and minutes > 60 else "请在官方页面核对空位和费用"
                         if vid == "HKTC" and cfg["play_type"] == "doubles" and not known:
-                            warning += "；雙打須排除8、10、11號場"
+                            warning += "。双打须排除 8、10、11 号场"
                         if source == "demo":
-                            warning = "演示資料，並非真實可訂場次；" + warning
+                            warning = "此为演示场次。" + warning
                         candidates.append({
                             "id": hashlib.sha256(identity.encode()).hexdigest()[:20],
-                            "venue_id": vid, "venue_name": chain[0].get("venue_name") or _VENUE_MAP.get(vid, {}).get("name", vid),
+                            "venue_id": vid, "venue_name": venue_label(vid, chain[0].get("venue_name")),
                             "date": day_string, "start": _hm(begin), "end": _hm(goal),
                             "duration_hours": minutes / 60, "available_courts": n,
                             "continuity": continuity, "court_ids": sorted(common) if common else [],
@@ -231,11 +235,11 @@ def plan_slots(slots, config=None, confirmed_bookings=None, now=None):
                             paths.append((r["_end"], chain + [r]))
     candidates.sort(key=lambda c: (-c["score"], c["date"], c["start"], c["id"]))
     if invalid:
-        warnings.append(f"忽略{invalid}筆格式無效的空位記錄。")
+        warnings.append(f"已跳过 {invalid} 条格式无效的空位记录。")
     if unknown_price:
-        warnings.append("設定了價格上限；未提供可核實單價的場次已排除，避免超出預算。")
+        warnings.append("已按预算筛选，并排除未提供可核实单价的场次。")
     if not candidates:
-        warnings.append("目前沒有符合條件的場次；資料失效或網絡錯誤亦可能影響結果，請查看資料狀態。")
+        warnings.append("目前没有符合条件的场次。请查看数据状态，或调整排场偏好。")
     return {"candidates": candidates, "warnings": list(dict.fromkeys(warnings)), "window": {"start": today.isoformat(), "end": latest.isoformat()}, "release": release_schedule(current)}
 
 
