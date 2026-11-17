@@ -18,7 +18,7 @@ from smartplay.planner import DEFAULT_CONFIG, HKT, VENUES, plan_slots, release_s
 from smartplay.feed import FeedClient
 from smartplay.storage import Store
 from smartplay.calendar_export import release_calendar, booking_calendar
-from smartplay.availability_watch import AvailabilityWatch, DEFAULT_WATCH_VENUES
+from smartplay.availability_watch import AvailabilityWatch, DEFAULT_WATCH_VENUES, event_can_notify
 from smartplay.desktop_notifications import desktop_channel, notify_desktop
 
 ROOT = Path(__file__).resolve().parent
@@ -84,6 +84,7 @@ class Application:
         self.alerts = deque(maxlen=60)
         self.alert_ids = set()
         self.watch = AvailabilityWatch(self.store)
+        self.last_watch_attempt = None
         self.notifier = notifier
         self.native_delivery = desktop_channel()
         self.history = {}
@@ -106,6 +107,15 @@ class Application:
         if len(self.alert_ids) > 5000:
             self.alert_ids = {a['id'] for a in self.alerts}
 
+    def availability_notification_is_current(self, event, feed, now):
+        return (self.config['monitor_enabled']
+                and event.get('venue_id') in self.config['watch_venue_ids']
+                and self.watch.selection == (tuple(self.config['watch_venue_ids']), self.config['play_type'])
+                and feed['status'] == 'live'
+                and feed.get('source_freshness') == 'verified'
+                and feed.get('fetched_at') == event.get('fetched_at')
+                and event_can_notify(event, now))
+
     def snapshot(self):
         with self.lock:
             now = datetime.now(HKT)
@@ -113,10 +123,15 @@ class Application:
             mode = self.mode
             feed = self.client.snapshot(play_type=config['play_type'], now=now)
             watch_ready = (config['monitor_enabled'] and feed['status'] == 'live'
+                           and feed.get('source_freshness') == 'verified'
                            and self.watch.checked_at == feed.get('fetched_at')
                            and self.watch.selection == (tuple(config['watch_venue_ids']), config['play_type'])
                            and bool(self.watch.covered_venues))
-            alerts = sorted([*self.watch.events, *self.alerts],
+            availability_alerts = [
+                {**event, 'notify': self.availability_notification_is_current(event, feed, now)}
+                for event in self.watch.events
+            ]
+            alerts = sorted([*availability_alerts, *self.alerts],
                             key=lambda alert: alert['created_at'], reverse=True)[:60]
             monitor = {
                 'venue_ids': config['watch_venue_ids'],
@@ -159,18 +174,28 @@ class Application:
                 self.store.set('cached_feed_timestamp', refreshed['fetched_at'])
         with self.lock:
             feed = self.client.snapshot(play_type=self.config['play_type'])
-            events = self.watch.inspect(feed, self.config, datetime.now(HKT))
+            events = []
+            attempted_at = feed.get('last_attempt_at')
+            if not feed['refreshing'] and attempted_at and attempted_at != self.last_watch_attempt:
+                events = self.watch.inspect(feed, self.config, datetime.now(HKT))
+                self.last_watch_attempt = attempted_at
         if events and self.native_delivery == 'windows':
             threading.Thread(target=self.deliver_events, args=(events,), daemon=True).start()
         return self.snapshot()
 
     def deliver_events(self, events):
         for event in events:
-            self.notifier(event['title'], event['body'])
+            with self.lock:
+                now = datetime.now(HKT)
+                feed = self.client.snapshot(play_type=self.config['play_type'], now=now)
+                send = self.availability_notification_is_current(event, feed, now)
+            if send:
+                self.notifier(event['title'], event['body'])
 
     def import_feed(self, payload):
         with self.lock:
             self.client.import_payload(payload)
+            self.watch.invalidate_baseline()
             self.store.set('public_feed', {'payload': payload, 'fetched_at': datetime.now(HKT).isoformat()})
             self.mode = 'live'
             self.store.set('mode', 'live')
@@ -211,17 +236,25 @@ class Application:
 
     def run_monitor(self):
         while not self.stop_event.is_set():
+            wait = 15
             try:
                 with self.lock:
                     self.tick()
                     enabled = self.config['monitor_enabled']
                 if enabled:
-                    self.refresh()
+                    with self.client.lock:
+                        due_at = self.client.next_retry_at
+                    if due_at is None or due_at <= datetime.now(HKT):
+                        self.refresh()
+                    with self.client.lock:
+                        due_at = self.client.next_retry_at
+                    if due_at:
+                        wait = min(wait, max(0.1, (due_at - datetime.now(HKT)).total_seconds()))
             except Exception:
                 # A failing network must not terminate reminder scheduling.
                 with self.lock:
                     self.add_alert('monitor-error', '数据更新暂时失败', '请查看数据状态，或从官方公开数据文件手动导入。')
-            self.stop_event.wait(15)
+            self.stop_event.wait(wait)
 
 
 class Server(ThreadingHTTPServer):
@@ -312,8 +345,10 @@ class Handler(BaseHTTPRequestHandler):
             if path == '/api/config' and self.command == 'POST':
                 config = validate_config(payload)
                 with app.lock:
-                    app.config = config
                     app.store.set('config', config)
+                    if any(config[key] != app.config[key] for key in ('monitor_enabled', 'watch_venue_ids', 'play_type')):
+                        app.watch.invalidate_baseline()
+                    app.config = config
                 result = app.snapshot()
             elif path == '/api/refresh' and self.command == 'POST':
                 result = app.refresh()

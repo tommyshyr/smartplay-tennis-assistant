@@ -22,7 +22,7 @@
 
     <div id="connection-error" class="notice error" role="alert" hidden></div>
     <section class="source-panel" aria-label="数据状态">
-      <div class="source-main"><span id="source-dot" class="status-dot"></span><div><strong id="source-label">正在读取数据状态…</strong><p id="source-detail">官方开放数据每五分钟更新；空位不代表已锁场。</p></div></div>
+      <div class="source-main"><span id="source-dot" class="status-dot"></span><div><strong id="source-label">正在读取数据状态…</strong><p id="source-detail">康文署约每五分钟更新公开数据。实际空位以官方应用为准。</p></div></div>
       <div class="source-actions"><button id="refresh-button" class="button subtle" type="button">刷新数据</button><button id="mode-button" class="button ghost" type="button">进入演示</button></div>
     </section>
     <div id="demo-notice" class="notice demo" hidden><strong>当前是演示模式。</strong> 下方为合成时段，只用于体验排场；不能据此认定场地有空位或登记真实预订。</div>
@@ -35,7 +35,7 @@
 
     <section class="watch-panel" aria-labelledby="watch-title">
       <div class="watch-head">
-        <div><h2 id="watch-title">空位监测</h2><p class="section-description">关注场地有新增可订时段时提醒你。康文署开放数据约每五分钟更新，空位以官方应用 为准。</p></div>
+        <div><h2 id="watch-title">空位监测</h2><p class="section-description">在近期公开数据中查到关注时段从满场变为有空时提醒。实际空位以官方应用为准。</p></div>
         <span id="watch-status" class="watch-status" role="status">正在连接</span>
       </div>
       <div class="watch-grid">
@@ -50,9 +50,9 @@
         </form>
         <div>
           <dl class="watch-stats">
-            <div><dt>最近检查</dt><dd id="watch-checked-at">—</dd></div>
+            <div><dt>最近有效检查</dt><dd id="watch-checked-at">—</dd></div>
             <div><dt>官方数据标注时间</dt><dd id="watch-data-at">—</dd></div>
-            <div><dt>目前可订时段</dt><dd id="watch-slot-count">—</dd></div>
+            <div><dt>快照中的空位时段</dt><dd id="watch-slot-count">—</dd></div>
           </dl>
           <p id="watch-coverage" class="field-help" hidden></p>
           <p id="watch-native-status" class="field-help" hidden></p>

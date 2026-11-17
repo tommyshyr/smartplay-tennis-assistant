@@ -5,8 +5,10 @@ import unittest
 import urllib.error
 from datetime import datetime, timedelta
 from email.message import Message
+from email.utils import format_datetime
+from unittest.mock import patch
 
-from smartplay.feed import FEED_URL, FeedClient, FeedSchemaError, HKT, parse_feed
+from smartplay.feed import FEED_URL, SOURCE_STALE_SECONDS, FeedClient, FeedSchemaError, HKT, parse_feed
 
 
 def row(**changes):
@@ -97,6 +99,116 @@ class FeedClientTests(unittest.TestCase):
         client.refresh(now=self.at + timedelta(seconds=300))
         self.assertEqual(len(calls), 2)
         self.assertEqual(client.snapshot(now=self.at + timedelta(seconds=1000))["status"], "stale")
+
+    def test_revalidates_same_url_and_records_source_freshness(self):
+        def fetch(request, timeout):
+            self.assertEqual(request.full_url, FEED_URL)
+            self.assertIn("no-cache", request.get_header("Cache-control"))
+            self.assertEqual(request.get_header("Pragma"), "no-cache")
+            return Response(json.dumps([row()]).encode())
+
+        client = FeedClient(opener=fetch)
+        fetched = client.refresh(now=self.at + timedelta(seconds=30))
+        self.assertEqual(fetched["status"], "live")
+        self.assertEqual(fetched["source_freshness"], "verified")
+        self.assertEqual(fetched["source_updated_at"], "2026-11-07T03:00:00+00:00")
+        self.assertEqual(fetched["source_age_seconds"], 30)
+        self.assertIsNone(fetched["http_age_seconds"])
+
+        at_expiry = self.at + timedelta(seconds=SOURCE_STALE_SECONDS + 1)
+        expired = client.snapshot(now=at_expiry)
+        self.assertEqual(expired["status"], "stale")
+        self.assertEqual(expired["source_freshness"], "stale")
+        self.assertEqual(expired["slots"], fetched["slots"])
+
+    def test_missing_or_untrusted_last_modified_is_unknown(self):
+        for modified in (None, "not a date", format_datetime(self.at + timedelta(minutes=2))):
+            with self.subTest(modified=modified):
+                response = Response(json.dumps([row()]).encode())
+                response.headers = {"Date": format_datetime(self.at), "Age": "0"}
+                if modified is not None:
+                    response.headers["Last-Modified"] = modified
+                client = FeedClient(opener=lambda *args, **kwargs: response)
+                snapshot = client.refresh(now=self.at)
+
+                self.assertEqual(snapshot["status"], "live")
+                self.assertEqual(snapshot["source_freshness"], "unknown")
+                self.assertIsNone(snapshot["source_updated_at"])
+                self.assertIsNone(snapshot["source_age_seconds"])
+                self.assertEqual(snapshot["http_age_seconds"], 0)
+                self.assertEqual(len(snapshot["slots"]), 1)
+
+    def test_stale_source_cannot_initialize_a_live_snapshot(self):
+        client = FeedClient(opener=lambda *args, **kwargs: Response(json.dumps([row()]).encode()))
+        snapshot = client.refresh(now=self.at + timedelta(seconds=SOURCE_STALE_SECONDS + 1))
+        self.assertEqual(snapshot["status"], "stale")
+        self.assertEqual(snapshot["source_freshness"], "stale")
+        self.assertIsNone(snapshot["fetched_at"])
+        self.assertEqual(snapshot["slots"], [])
+
+    def test_stale_http_cache_rejected_even_with_fresh_last_modified(self):
+        recent = self.at + timedelta(minutes=5)
+        too_old = Response(json.dumps([row(Available_Courts="0")]).encode())
+        too_old.headers = {"Last-Modified": format_datetime(recent),
+                           "Age": str(SOURCE_STALE_SECONDS + 1)}
+        responses = iter([
+            Response(json.dumps([row()]).encode()),
+            too_old,
+        ])
+        client = FeedClient(opener=lambda *args, **kwargs: next(responses))
+        first = client.refresh(now=self.at)
+        rejected = client.refresh(now=recent)
+
+        self.assertEqual(rejected["status"], "stale")
+        self.assertEqual(rejected["source_freshness"], "stale")
+        self.assertEqual(rejected["fetched_at"], first["fetched_at"])
+        self.assertEqual(rejected["source_updated_at"], first["source_updated_at"])
+        self.assertEqual(rejected["slots"], first["slots"])
+        self.assertEqual(rejected["next_retry_at"], (recent + timedelta(minutes=5)).isoformat())
+
+    def test_regressed_last_modified_does_not_replace_previous_snapshot(self):
+        regressed = Response(json.dumps([row(Available_Courts="0")]).encode())
+        regressed.headers = {"Last-Modified": format_datetime(self.at - timedelta(seconds=1))}
+        recovered_at = self.at + timedelta(minutes=10)
+        recovered = Response(json.dumps([row(Available_Courts="1")]).encode())
+        recovered.headers = {"Last-Modified": format_datetime(recovered_at)}
+        responses = iter([
+            Response(json.dumps([row()]).encode()),
+            regressed,
+            recovered,
+        ])
+        client = FeedClient(opener=lambda *args, **kwargs: next(responses))
+        first = client.refresh(now=self.at)
+        rejected = client.refresh(now=self.at + timedelta(minutes=5))
+        self.assertEqual(rejected["source_freshness"], "stale")
+        self.assertEqual(rejected["slots"], first["slots"])
+
+        current = client.refresh(now=recovered_at)
+        self.assertEqual(current["status"], "live")
+        self.assertEqual(current["source_freshness"], "verified")
+        self.assertEqual(current["slots"][0]["available_courts"], 1)
+
+    def test_future_timestamp_in_old_cache_cannot_block_new_network_data(self):
+        client = FeedClient(opener=lambda *args, **kwargs: Response(json.dumps([row()]).encode()))
+        client.restore_payload([row(Available_Courts="0")], fetched_at=self.at,
+                               source_updated_at=(self.at + timedelta(days=1)).isoformat(),
+                               origin="import")
+        snapshot = client.refresh(now=self.at)
+
+        self.assertEqual(snapshot["source_freshness"], "verified")
+        self.assertEqual(snapshot["slots"][0]["available_courts"], 2)
+
+    def test_success_timestamp_is_after_download_and_validation(self):
+        completed = self.at + timedelta(seconds=15)
+        moments = iter([self.at, completed])
+        client = FeedClient(opener=lambda *args, **kwargs: Response(json.dumps([row()]).encode()))
+        with patch("smartplay.feed._now", side_effect=lambda value=None: next(moments) if value is None else value):
+            snapshot = client.refresh()
+
+        self.assertEqual(snapshot["last_attempt_at"], self.at.isoformat())
+        self.assertEqual(snapshot["fetched_at"], completed.isoformat())
+        self.assertEqual(snapshot["source_age_seconds"], 15)
+        self.assertEqual(snapshot["next_retry_at"], (self.at + timedelta(minutes=5)).isoformat())
 
     def test_forbidden_suspends_thirty_minutes(self):
         calls = []

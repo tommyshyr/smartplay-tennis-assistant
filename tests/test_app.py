@@ -8,6 +8,7 @@ import re
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 
 from app import Application, Server
@@ -163,6 +164,57 @@ class ApplicationHTTPTests(unittest.TestCase):
         status, calendar, _ = self.request(path='/api/bookings.ics')
         self.assertEqual(status, 200)
         self.assertIn('SUMMARY:香港网球中心', calendar)
+
+    def test_only_a_completed_refresh_changes_the_watch_baseline(self):
+        now = datetime.now(HKT)
+        baseline = self.app.client.snapshot(now=now)
+        first_attempt = (now - timedelta(minutes=5)).isoformat(timespec='seconds')
+        new_attempt = now.isoformat(timespec='seconds')
+        aged = {**baseline, 'status': 'stale', 'last_attempt_at': first_attempt}
+        self.app.last_watch_attempt = first_attempt
+        with patch.object(self.app.client, 'refresh'), patch.object(self.app.watch, 'inspect') as inspect:
+            with patch.object(self.app.client, 'snapshot', return_value=aged):
+                self.app.refresh()
+            inspect.assert_not_called()
+            with patch.object(self.app.client, 'snapshot', return_value={
+                **aged, 'last_attempt_at': new_attempt, 'refreshing': True,
+            }):
+                self.app.refresh()
+            inspect.assert_not_called()
+            failed = {**aged, 'last_attempt_at': new_attempt}
+            with patch.object(self.app.client, 'snapshot', return_value=failed):
+                self.app.refresh()
+                self.app.refresh()
+            inspect.assert_called_once()
+            self.assertEqual(inspect.call_args.args[0], failed)
+
+    def test_availability_dispatch_skips_expired_and_superseded_events(self):
+        now = datetime.now(HKT)
+        fetched_at = (now - timedelta(seconds=3)).isoformat(timespec='seconds')
+        source_at = (now - timedelta(minutes=2)).isoformat(timespec='seconds')
+        slots = [{'date': official_rows()[0]['Available_Date'], 'start': '09:00'}]
+        fresh = {'id': 'test-availability', 'kind': 'availability', 'venue_id': 'HKTC',
+                 'title': '测试空位', 'body': '测试正文', 'created_at': fetched_at,
+                 'fetched_at': fetched_at, 'source_updated_at': source_at, 'slots': slots}
+        expired = {**fresh, 'id': 'test-expired',
+                   'fetched_at': (now - timedelta(minutes=2)).isoformat(timespec='seconds')}
+        self.app.watch.selection = (tuple(self.app.config['watch_venue_ids']), self.app.config['play_type'])
+        self.app.watch.events = [fresh, expired]
+        feed = {**self.app.client.snapshot(now=now), 'status': 'live',
+                'source_freshness': 'verified', 'fetched_at': fetched_at}
+        delivered = []
+        self.app.notifier = lambda title, body: delivered.append((title, body))
+        with patch.object(self.app.client, 'snapshot', return_value=feed):
+            _, state, _ = self.request()
+            flags = {alert['id']: alert['notify'] for alert in state['alerts']}
+            self.assertEqual(flags, {'test-availability': True, 'test-expired': False})
+            self.app.deliver_events([fresh, expired])
+        self.assertEqual(delivered, [(fresh['title'], fresh['body'])])
+
+        feed = {**feed, 'fetched_at': now.isoformat(timespec='seconds')}
+        with patch.object(self.app.client, 'snapshot', return_value=feed):
+            self.app.deliver_events([fresh])
+        self.assertEqual(len(delivered), 1)
 
     def test_demo_cannot_create_real_booking_or_calendar_event(self):
         code, state, _ = self.request('POST', '/api/mode', {'mode': 'demo'})

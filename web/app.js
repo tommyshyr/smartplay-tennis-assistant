@@ -78,8 +78,9 @@
     if (!demo && feed.source_updated_at && validDate(feed.source_updated_at)) parts.push(`来源更新时间 ${fullTimestamp.format(validDate(feed.source_updated_at))}`);
     if (demo) parts.push('下方场次为合成示例。空位监测的开关独立设置。');
     else if (feed.status === 'imported') parts.push('手动快照不会自行更新；请重新下载导入以获取新空位。');
-    else if (feed.error) parts.push(`获取失败：${safeText(feed.error)}`);
-    else parts.push('每五分钟更新；官方付款完成后才确认预订。');
+    else if (feed.error) parts.push(safeText(feed.error));
+    else if (feed.source_freshness === 'unknown') parts.push('未能核实来源更新时间，可用于排场参考。');
+    else parts.push('康文署约每五分钟更新公开数据。');
     if (!demo && Number.isFinite(feed.row_count)) parts.push(`原始记录 ${feed.row_count} 条`);
     $('source-detail').textContent = parts.join(' · ');
     $('demo-notice').hidden = !demo;
@@ -193,6 +194,10 @@
     else if (monitor.ready && feed.status === 'live') {
       label = '监测中';
       active = true;
+    } else if (feed.status === 'live' && feed.source_freshness === 'unknown') {
+      label = '来源时间无法核实，暂停提醒';
+    } else if (feed.status === 'stale') {
+      label = '数据过期或更新失败，暂停提醒';
     } else if (feed.error) {
       label = '暂未取得可用数据';
     }
@@ -314,9 +319,16 @@
     displayAlerts('watch-alerts', availability);
     displayAlerts('alerts', alerts.filter(alert => alert.kind !== 'availability'));
     if (seenAlerts && 'Notification' in window && Notification.permission === 'granted') {
-      for (const alert of alerts.filter(alert => !seenAlerts.has(alert.id))) {
+      for (const alert of alerts) {
+        if (seenAlerts.has(alert.id) || (alert.kind === 'availability' && alert.notify !== true)) continue;
         try {
-          new Notification(safeText(alert.title), { body: safeText(alert.body), tag: safeText(alert.id) });
+          const notification = new Notification(safeText(alert.title), { body: safeText(alert.body), tag: safeText(alert.id) });
+          if (alert.kind === 'availability') {
+            notification.onclick = () => {
+              window.open(officialUrl, '_blank', 'noopener,noreferrer');
+              notification.close();
+            };
+          }
         } catch {
           // The alert is still visible in its list.
         }
@@ -451,5 +463,8 @@
   renderNotificationStatus();
   loadState();
   setInterval(tick, 1000);
-  setInterval(loadState, 30000);
+  setInterval(loadState, 15000);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) loadState();
+  });
 })();

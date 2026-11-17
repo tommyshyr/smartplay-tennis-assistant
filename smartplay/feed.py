@@ -26,6 +26,8 @@ HKT = timezone(timedelta(hours=8))
 FEED_URL = "https://data.smartplay.lcsd.gov.hk/rest/cms/api/v1/publ/contents/open-data/tennis/file"
 MIN_REFRESH_SECONDS = 300
 STALE_SECONDS = 600
+SOURCE_STALE_SECONDS = 360
+SOURCE_CLOCK_SKEW_SECONDS = 60
 MAX_BYTES = 20 * 1024 * 1024
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}\Z")
 _TIME = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d\Z")
@@ -206,6 +208,25 @@ def _retry_after(value: str | None, now: datetime) -> int:
     return MIN_REFRESH_SECONDS
 
 
+def _last_modified(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        timestamp = parsedate_to_datetime(value)
+        return timestamp.astimezone(timezone.utc) if timestamp.tzinfo is not None else None
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def _http_age(value: str | None) -> int | None:
+    value = (value or "").strip()
+    if not value.isascii() or not value.isdecimal():
+        return None
+    digits = value.lstrip("0")
+    # Saturate very large values without converting an unbounded integer.
+    return int(digits or "0") if len(digits) <= 10 else 10 ** 10
+
+
 class FeedClient:
     """Thread-safe five-minute public-data client, with no login or cookies.
 
@@ -224,7 +245,10 @@ class FeedClient:
         self.fetched_at: datetime | None = None
         self.last_attempt_at: datetime | None = None
         self.next_retry_at: datetime | None = None
-        self.source_updated_at: str | None = None
+        self.source_updated_at: datetime | None = None
+        self.latest_source_update: datetime | None = None
+        self.http_age_seconds: int | None = None
+        self.source_rejected = False
         self.origin: str | None = None
         self.error: str | None = None
         self.failures = 0
@@ -234,12 +258,26 @@ class FeedClient:
         at = _now(now)
         with self.lock:
             parsed = parse_feed(self.payload, play_type) if self.payload is not None else {"slots": [], "warnings": [], "raw_row_count": 0}
-            if self.payload is None:
-                status = "unavailable"
-            elif self.error or not self.fetched_at or (at - self.fetched_at).total_seconds() > STALE_SECONDS:
+            download_age = (at - self.fetched_at).total_seconds() if self.fetched_at else None
+            source_age = (at - self.source_updated_at).total_seconds() if self.source_updated_at else None
+            cache_age = (self.http_age_seconds + max(0, download_age)
+                         if self.http_age_seconds is not None and download_age is not None else None)
+            source_stale = self.source_rejected or (
+                self.origin == "network"
+                and any(age is not None and age > SOURCE_STALE_SECONDS for age in (source_age, cache_age))
+            )
+            if source_stale:
+                freshness = "stale"
                 status = "stale"
+            elif self.payload is None:
+                freshness = "unknown"
+                status = "unavailable"
             else:
-                status = "imported" if self.origin == "import" else "live"
+                freshness = "verified" if self.origin == "network" and source_age is not None else "unknown"
+                if self.error or download_age is None or download_age > STALE_SECONDS:
+                    status = "stale"
+                else:
+                    status = "imported" if self.origin == "import" else "live"
             return {
                 "status": status,
                 "slots": parsed["slots"],
@@ -249,7 +287,10 @@ class FeedClient:
                 "error": self.error,
                 "next_retry_at": _iso(self.next_retry_at),
                 "row_count": parsed["raw_row_count"],
-                "source_updated_at": self.source_updated_at,
+                "source_updated_at": _iso(self.source_updated_at),
+                "source_freshness": freshness,
+                "source_age_seconds": int(max(0, source_age)) if source_age is not None else None,
+                "http_age_seconds": self.http_age_seconds,
                 "origin": self.origin,
                 "refreshing": self.refreshing,
             }
@@ -266,6 +307,8 @@ class FeedClient:
             self.payload = copy.deepcopy(payload)
             self.fetched_at = at
             self.source_updated_at = None
+            self.http_age_seconds = None
+            self.source_rejected = False
             self.origin = "import"
             self.error = None
         return self.snapshot(now=at)
@@ -273,10 +316,18 @@ class FeedClient:
     def restore_payload(self, payload, fetched_at, source_updated_at=None, origin="network") -> None:
         """Restore a previously validated cache; retains its original age."""
         parse_feed(payload)
+        fetched_at = _now(fetched_at)
+        source_at = _now(source_updated_at).astimezone(timezone.utc) if source_updated_at else None
+        if source_at and (source_at - fetched_at).total_seconds() > SOURCE_CLOCK_SKEW_SECONDS:
+            source_at = None
         with self.lock:
             self.payload = copy.deepcopy(payload)
-            self.fetched_at = _now(fetched_at)
-            self.source_updated_at = source_updated_at
+            self.fetched_at = fetched_at
+            self.source_updated_at = source_at
+            if source_at and (self.latest_source_update is None or source_at > self.latest_source_update):
+                self.latest_source_update = source_at
+            self.http_age_seconds = None
+            self.source_rejected = False
             self.origin = "import" if origin == "import" else "network"
 
     def refresh(self, play_type: str = "singles", now=None) -> dict:
@@ -290,10 +341,13 @@ class FeedClient:
         delay = MIN_REFRESH_SECONDS
         error = None
         payload = None
-        source_updated_at = None
+        source_at = None
+        http_age = None
         try:
             request = urllib.request.Request(FEED_URL, headers={
                 "Accept": "application/json",
+                "Cache-Control": "no-cache, max-age=0",
+                "Pragma": "no-cache",
                 "User-Agent": "SmartPLAY-Public-Data-Assistant/1.0 (5-minute-cache)",
             })
             fetch = self.opener.open if hasattr(self.opener, "open") else self.opener
@@ -307,12 +361,9 @@ class FeedClient:
                     raise FeedSchemaError("公开数据文件过大")
                 payload = json.loads(body.decode("utf-8-sig"))
                 parse_feed(payload, play_type)
-                modified = response.headers.get("Last-Modified") if hasattr(response, "headers") else None
-                if modified:
-                    try:
-                        source_updated_at = parsedate_to_datetime(modified).isoformat()
-                    except (ValueError, TypeError, OverflowError):
-                        pass
+                headers = getattr(response, "headers", {})
+                source_at = _last_modified(headers.get("Last-Modified"))
+                http_age = _http_age(headers.get("Age"))
         except urllib.error.HTTPError as exc:
             if exc.code in {401, 403}:
                 delay = 1800
@@ -336,18 +387,36 @@ class FeedClient:
         except Exception as exc:
             error = f"公开数据读取失败（{type(exc).__name__}）；保留上次快照。"
         finally:
+            completed_at = _now(now)
             with self.lock:
                 self.refreshing = False
+                self.source_rejected = False
                 if error:
                     self.failures += 1
                     delay = max(delay, min(1800, MIN_REFRESH_SECONDS * 2 ** min(self.failures - 1, 3)))
                     self.error = error
                 else:
-                    self.payload = payload
-                    self.fetched_at = at
-                    self.source_updated_at = source_updated_at
-                    self.origin = "network"
-                    self.error = None
                     self.failures = 0
+                    source_age = (completed_at - source_at).total_seconds() if source_at else None
+                    if source_age is not None and source_age < -SOURCE_CLOCK_SKEW_SECONDS:
+                        source_at = None
+                        source_age = None
+                    if http_age is not None and http_age > SOURCE_STALE_SECONDS:
+                        self.error = "官方接口返回的缓存响应超过 6 分钟，保留上次可用快照。"
+                    elif source_age is not None and source_age > SOURCE_STALE_SECONDS:
+                        self.error = "官方数据更新时间距今超过 6 分钟，保留上次可用快照。"
+                    elif source_at and self.latest_source_update and source_at < self.latest_source_update:
+                        self.error = "官方数据更新时间早于上一版本，保留上次可用快照。"
+                    else:
+                        self.error = None
+                    self.source_rejected = self.error is not None
+                    if not self.source_rejected:
+                        self.payload = payload
+                        self.fetched_at = completed_at
+                        self.source_updated_at = source_at
+                        self.http_age_seconds = http_age
+                        self.origin = "network"
+                        if source_at:
+                            self.latest_source_update = source_at
                 self.next_retry_at = at + timedelta(seconds=delay)
-        return self.snapshot(play_type, now=at)
+        return self.snapshot(play_type, now=completed_at)
